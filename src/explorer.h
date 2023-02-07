@@ -1,6 +1,5 @@
 #include "common.h"
 #include "m_alloc.c"
-#include <corecrt.h>
 
 typedef enum Commands {
     c_invalid,

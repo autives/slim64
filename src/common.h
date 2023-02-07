@@ -12,12 +12,19 @@ typedef int16_t  i16;
 typedef int32_t  i32;
 typedef int64_t  i64;
 
-typedef u32 file_offset;
+typedef u64 file_offset;
+typedef u32 block_index;
 
 #define Assert(exp)                 \
     if(exp == 0) {                  \
         *(int*)1 = 0;               \
     }
+
+#define OffsetOf(structure, element) (ptrdiff_t)&(((structure*)0)->element)
+#define RoundUpDivision(a, b) ((a) + (b) - 1 ) / (b)
+
+#define MIN(a, b) ((a) < (b)) ? (a) : (b)
+#define MAX(a, b) ((a) > (b)) ? (a) : (b)
 
 #define KiloBytes(n) ((n) * 1024L)
 #define MegaBytes(n) (KiloBytes(n) * 1024L)

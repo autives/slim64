@@ -8,5 +8,6 @@ else
 fi
 
 mkdir -p build
-gcc -nostdlib -m64 -g src/entry.c -o build/slim64
-build/slim64 "hello there"
+gcc -nostdlib -m64 -g src/entry.c -o build/slim64.out
+cd build
+./slim64.out

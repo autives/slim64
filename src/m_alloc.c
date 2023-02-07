@@ -4,10 +4,10 @@
 #include "common.h"
 #include "platform.c"
 
-#define ARENA_ALLOCATION_SIZE GigaBytes(1)
-#define CHUNK_LIST_SIZE 1024
+#define ARENA_ALLOCATION_SIZE 512
 
 typedef struct memory_arena {
+    u32 is_temp;
     size_t total_size;
     size_t used_size;
     char *mem;
@@ -17,14 +17,27 @@ int InitMemArena(Arena *arena, size_t size) {
     arena->total_size = size;
     arena->used_size = 0;
     arena->mem = MemAlloc(size);
+    arena->is_temp = 0;
     if(!arena->mem)
         return 0;
     return 1;
 }
 
+int InitTempArena(Arena *arena, size_t size) {
+    int res = InitMemArena(arena, size);
+    if(res) arena->is_temp = 1;
+    return res;
+}
+
 void* PushSize(Arena *arena, size_t size) {
-    if(arena->used_size + size >= arena->total_size)
-        return 0;
+    if(arena->used_size + size >= arena->total_size){
+        if(!arena->is_temp)
+            return 0;
+        if(size > arena->total_size)
+            return 0;
+        else
+            arena->used_size = 0;
+    }
 
     void *res= arena->mem + arena->used_size;
     arena->used_size += size;
@@ -34,48 +47,28 @@ void* PushSize(Arena *arena, size_t size) {
 #define PushStruct(arena, type) PushSize(arena, sizeof(type))
 #define PushArray(arena, type, count) PushSize(arena, count * sizeof(type))
 
-typedef struct {
-    size_t total_size;
-    size_t used_size;
-    void *start;
 
-    void *last_allocated_address;
+typedef struct Vector {
+    void *mem;
+    u32 count;
+    u32 total;
+    size_t unit_size;
+    Arena *arena;
+} Vector;
 
-    u32 allocated_chunk_count;
-    void *allocated_chunks[CHUNK_LIST_SIZE];
-} Allocator;
+Vector VectorBegin(Arena *arena, u32 init_count, size_t unit_size) {
+    Vector vec = { 0 };
 
-void InitAllocator(Allocator *arena) {
-    arena->start = MemAlloc(ARENA_ALLOCATION_SIZE);
-    if(!arena->start)
-        return;
-    
-    arena->total_size = ARENA_ALLOCATION_SIZE;
-    arena->used_size = 0;
-    arena->last_allocated_address = arena->start;
-    arena->allocated_chunk_count = 0;
+    vec.arena = arena;
+    vec.unit_size = unit_size;
+    vec.total = init_count;
+    vec.count = 0;
+    vec.mem = PushSize(arena, unit_size * init_count);
+
+    return vec;
 }
 
-void *m_alloc(Allocator *arena, size_t size) {
-    u32 *chunk_addr = arena->last_allocated_address;
-    while(*chunk_addr == 1) {
-        chunk_addr += 2 + (*(chunk_addr + 1));
-        if((ptrdiff_t)chunk_addr > (ptrdiff_t)arena->start + arena->total_size)
-            chunk_addr = arena->start;
-    }
-    *chunk_addr = 1;
-    *(chunk_addr + 1) = size;
-    arena->last_allocated_address = (char*)(chunk_addr + 2) + size;
-    return (chunk_addr + 2);    
-}
-
-void m_free(Allocator *arena, void *ptr) {
-    u32 *chunk_addr = ptr;
-    chunk_addr -= 2;
-    *chunk_addr = 0;
-}
-
-void m_copy(void *src, void *dst, size_t size) {
+static void m_copy(void *src, void *dst, size_t size) {
     if(!(size & 0x03)) {            //multiple of 4
         u32 *_src = src, *_dst = dst;
         u32 _size = size >> 2;
@@ -91,56 +84,10 @@ void m_copy(void *src, void *dst, size_t size) {
     }
 }
 
-void *m_realloc(Allocator *arena, void *ptr, size_t size) {
-    u32 *old_chunk_addr = (u32*)ptr - 2;
-    u32 old_size = *(old_chunk_addr + 1);
-    if(old_size > size) {
-        u32 *free_chunk = (u32*)((char*)ptr + old_size);
-        *free_chunk = 0;
-        *(free_chunk + 1) = old_size - size - 2;
-        *(old_chunk_addr + 1) = size;   
-
-        return ptr;     
-    }
-
-    u32 *new_chunk_addr = arena->last_allocated_address;
-    while(*new_chunk_addr == 1) {
-        new_chunk_addr += 2 + (*(new_chunk_addr + 1));
-        if((ptrdiff_t)new_chunk_addr > (ptrdiff_t)arena->start + arena->total_size)
-            new_chunk_addr = arena->start;
-    }
-    *old_chunk_addr = 0; // free old memory
-    *new_chunk_addr = 1;
-    *(new_chunk_addr + 1) = size;
-    m_copy(ptr, new_chunk_addr + 2, old_size);
-
-    return (new_chunk_addr + 2);
-}
-
-
-typedef struct Vector {
-    void *mem;
-    u32 count;
-    u32 total;
-    size_t unit_size;
-    Allocator *arena;
-} Vector;
-
-Vector VectorBegin(Allocator *arena, u32 init_count, size_t unit_size) {
-    Vector vec = { 0 };
-
-    vec.arena = arena;
-    vec.unit_size = unit_size;
-    vec.total = init_count;
-    vec.count = 0;
-    vec.mem = m_alloc(arena, unit_size * init_count);
-
-    return vec;
-}
-
 void VectorPush(Vector *vec, void *val) {
     if(vec->count >= vec->total) {
-        vec->mem = m_realloc(vec->arena, vec->mem, 2 * vec->total * vec->unit_size);
+        void *new = PushSize(vec->arena, 2 * vec->total * vec->unit_size);
+        m_copy(vec->mem, new, vec->total * vec->unit_size);
         vec->total *= 2;
     }
 
@@ -148,7 +95,6 @@ void VectorPush(Vector *vec, void *val) {
 }
 
 void VectorFree(Vector *vec) {
-    m_free(vec->arena, vec->mem);
     vec->total = 0;
     vec->count = 0;
 }

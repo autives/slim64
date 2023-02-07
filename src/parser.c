@@ -75,12 +75,12 @@ char* GetString(char **str) {
     return result;
 }
 
-void* DoNothing(Allocator *arena, char **str) {
+void* DoNothing(Arena *arena, char **str) {
     return 0;
 }
 
-void* ExtractChangeDirectoryArgs(Allocator *arena, char **str) {
-    Path *args = m_alloc(arena, sizeof(Path));
+void* ExtractChangeDirectoryArgs(Arena *arena, char **str) {
+    Path *args = PushStruct(arena, Path);
     
     args->target = GetString(str);
     if(**str != '\0')
@@ -89,8 +89,8 @@ void* ExtractChangeDirectoryArgs(Allocator *arena, char **str) {
     return args;
 }
 
-void* ExtractMakeDirectoryArgs(Allocator *arena, char **str) {
-    MakeDirectoryArgs *args = m_alloc(arena, sizeof(*args));
+void* ExtractMakeDirectoryArgs(Arena *arena, char **str) {
+    MakeDirectoryArgs *args = PushStruct(arena, *args);
     args->names = VectorBegin(arena, 2, sizeof(char*));
 
     while(**str != 0) {
@@ -99,18 +99,18 @@ void* ExtractMakeDirectoryArgs(Allocator *arena, char **str) {
     }
     if(!args->names.count) {
         VectorFree(&args->names);
-        m_free(arena, args);
+        args = 0;
     }
 
     return args;
 }
 
-void* ExtractMakeFileArgs(Allocator *arena, char **str) {
+void* ExtractMakeFileArgs(Arena *arena, char **str) {
     return ExtractMakeDirectoryArgs(arena, str);
 }
 
-void* ExtractRenameArgs(Allocator *arena, char **str) {
-    ChangeName *args = m_alloc(arena, sizeof(ChangeName));
+void* ExtractRenameArgs(Arena *arena, char **str) {
+    ChangeName *args = PushStruct(arena, ChangeName);
 
     args->old_name = GetString(str);
     args->new_name = GetString(str);
@@ -118,8 +118,8 @@ void* ExtractRenameArgs(Allocator *arena, char **str) {
     return args;
 }
 
-void* ExtractCopyArgs(Allocator *arena, char **str) {
-    CopyArgs *args = m_alloc(arena, sizeof(*args));
+void* ExtractCopyArgs(Arena *arena, char **str) {
+    CopyArgs *args = PushStruct(arena, CopyArgs);
     args->names = VectorBegin(arena, 2, sizeof(char*));
 
     while(**str != 0) {
@@ -128,18 +128,18 @@ void* ExtractCopyArgs(Allocator *arena, char **str) {
     }
     if(!args->names.count) {
         VectorFree(&args->names);
-        m_free(arena, args);
+        args = 0;
     }
 
     return args;
 }
 
-void* ExtractMoveArgs(Allocator *arena, char **str) {
+void* ExtractMoveArgs(Arena *arena, char **str) {
     return ExtractCopyArgs(arena, str);
 }
 
-void* ExtractImportArgs(Allocator *arena, char **str) {
-    ImportArgs *args = m_alloc(arena, sizeof(*args));
+void* ExtractImportArgs(Arena *arena, char **str) {
+    ImportArgs *args = PushStruct(arena, ImportArgs);
     
     args->src = GetString(str);
     args->dst = GetString(str);
@@ -147,14 +147,14 @@ void* ExtractImportArgs(Allocator *arena, char **str) {
     return args;
 }
 
-void* ExtractSearchArgs(Allocator *arena, char **str) {
-    SearchArgs *args = m_alloc(arena, sizeof(*args));
+void* ExtractSearchArgs(Arena *arena, char **str) {
+    SearchArgs *args = PushStruct(arena, SearchArgs);
     args->name = GetString(str);
     return args;
 }
 
-void* ExtractFindArgs(Allocator *arena, char **str) {
-    FindArgs *args = m_alloc(arena, sizeof(*args));
+void* ExtractFindArgs(Arena *arena, char **str) {
+    FindArgs *args = PushStruct(arena, FindArgs);
     args->files = VectorBegin(arena, 2, sizeof(char*));
 
     args->str_to_search = GetString(str);
@@ -164,14 +164,14 @@ void* ExtractFindArgs(Allocator *arena, char **str) {
     }
     if(!args->files.count) {
         VectorFree(&args->files);
-        m_free(arena, args);
+        args = 0;
     }
 
     return args;
 }
 
-void* ExtractDeleteArgs(Allocator *arena, char **str) {
-    DeleteArgs *args = m_alloc(arena, sizeof(*args));
+void* ExtractDeleteArgs(Arena *arena, char **str) {
+    DeleteArgs *args = PushStruct(arena, DeleteArgs);
     args->names = VectorBegin(arena, 2, sizeof(char*));
 
     while(**str != 0) {
@@ -180,13 +180,13 @@ void* ExtractDeleteArgs(Allocator *arena, char **str) {
     }
     if(!args->names.count) {
         VectorFree(&args->names);
-        m_free(arena, args);
+        args = 0;
     }
     
     return args;
 }
 
-void* (*argument_extractor[c_total]) (Allocator *arena, char **str) = 
+void* (*argument_extractor[c_total]) (Arena *arena, char **str) = 
 {
     DoNothing,
     DoNothing,
@@ -213,7 +213,7 @@ typedef struct ExecutionBlock {
 } ExecutionBlock;
 
 
-static ExecutionBlock ExtractCommand(Allocator *arena, char *input) {
+static ExecutionBlock ExtractCommand(Arena *arena, char *input) {
     ExecutionBlock result =  { 0 };
 
     char *command = GetCommand(&input);

@@ -292,7 +292,7 @@ int ReadFromFile(active_file *file, void *buf, size_t size) {
     if(!ReadFile(file->handle, buf, size, &bytes_read, 0))
         return 0;
 #elif defined(__linux__)
-    _lseek(file->handle, file->write_offset, FOFFSET_BEGIN);
+    _lseek(file->handle, file->read_offset, FOFFSET_BEGIN);
     bytes_read = _read(file->handle, buf, size);
     if(bytes_read < 0)
         return 0;
@@ -301,6 +301,18 @@ int ReadFromFile(active_file *file, void *buf, size_t size) {
     file->read_offset += bytes_read;
     return bytes_read;
 
+}
+
+int ReadFromFileAtOffset(active_file *file, void *buf, size_t size, file_offset off) {
+    if(off > file->end)
+        return 0;
+    
+    file_offset prev_offset = file->read_offset;
+    file->read_offset = off;
+    int res = ReadFromFile(file, buf, size);
+    file->read_offset = prev_offset;
+
+    return res;
 }
 
 

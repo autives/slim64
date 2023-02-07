@@ -4,3 +4,4 @@ src/.clangd
 *.exe
 *.o
 *.out
+*.slm
