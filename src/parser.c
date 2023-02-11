@@ -1,3 +1,5 @@
+#if !defined(PARSER)
+
 #include "string.c"
 #include "m_alloc.c"
 #include "explorer.h"
@@ -81,7 +83,7 @@ void* DoNothing(Arena *arena, char **str) {
 
 void* ExtractChangeDirectoryArgs(Arena *arena, char **str) {
     Path *args = PushStruct(arena, Path);
-    
+
     args->target = GetString(str);
     if(**str != '\0')
         return 0;
@@ -223,7 +225,12 @@ static ExecutionBlock ExtractCommand(Arena *arena, char *input) {
             result.arg = argument_extractor[i](arena, &input);
             break;
         }
+        result.command = c_invalid;
+        result.arg = command;
     }
 
     return result;
 }
+
+#define PARSER
+#endif

@@ -46,6 +46,7 @@ void* PushSize(Arena *arena, size_t size) {
 
 #define PushStruct(arena, type) PushSize(arena, sizeof(type))
 #define PushArray(arena, type, count) PushSize(arena, count * sizeof(type))
+#define PushString(arena, length) PushArray(arena, char, length)
 
 
 typedef struct Vector {

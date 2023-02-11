@@ -235,7 +235,7 @@ static int WriteEntireFile(loaded_file file, char *file_name) {
 active_file CreateNewFile(const char *file_name) {
     active_file result;
 
- #if defined(_WIN32)   
+#if defined(_WIN32)   
     result.handle = CreateFileA(file_name, GENERIC_READ|GENERIC_WRITE, FILE_SHARE_READ, 0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
 #elif defined(__linux__)
     result.handle = _open(file_name, O_RDWR|O_CREAT, S_IRWXU);
@@ -244,6 +244,33 @@ active_file CreateNewFile(const char *file_name) {
     result.write_offset = 0;
     result.end = 0;
     result.permissions = FILE_READWRITE;
+
+    return result;
+}
+
+active_file OpenExistingFile(const char *file_name) {
+    active_file result = { 0 };
+
+#if defined(_WIN32)
+    result.handle = CreateFileA(file_name, GENERIC_READ|GENERIC_WRITE, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+    
+    LARGE_INTEGER LI_size;
+    GetFileSizeEx(result.handle, &LI_size);
+
+    result.end = LI_size.QuadPart;
+#elif defined(__linux__)
+    result.handle = _open(file_name, O_RDWR, 0);
+
+    struct stat fstat;
+    _stat(result.handle, &fstat);
+
+    result.end = fstat.st_size;
+#endif
+
+    result.read_offset = 0;
+    result.write_offset = 0;
+    result.permissions = FILE_READWRITE;
+
 
     return result;
 }

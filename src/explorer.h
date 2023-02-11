@@ -1,5 +1,11 @@
+#if !defined(EXPLORER)
+
 #include "common.h"
+#include "slim64.h"
 #include "m_alloc.c"
+#include "string.c"
+
+#define DEFAULT_FS_SIZE GigaBytes(1)
 
 typedef enum Commands {
     c_invalid,
@@ -77,8 +83,9 @@ static char *Command_Strings[c_total] =
 
 typedef struct file {
     size_t size;
-    const char *name;
-    const char *ext;
+    block_index base_block;
+    char name[124];
+    char ext[4];
 
     u32 isDirectory;
 
@@ -90,4 +97,10 @@ typedef struct explorer_state {
     u32 isAdmin;
     char path[256];
     Vector prev_commands;
+
+    Arena *arena;
+    FileSystem fs;
 } explorer_state;
+
+#define EXPLORER
+#endif

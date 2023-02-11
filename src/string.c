@@ -25,6 +25,8 @@ int _strcpy(const char *src, char *dst, size_t size) {
 
     int count = 0;
     for(; count < size; ++count) {
+        if(src[count] == '\0') 
+            break;
         dst[count] = src[count];
     }
     return count;

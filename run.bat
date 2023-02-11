@@ -20,9 +20,9 @@ goto :End
 
 :Compile
 if not exist "build" mkdir build
-pushd build
-cl -Zi -GS- -Gs999999 -nologo ..\src\entry.c -link -nodefaultlib -subsystem:console kernel32.lib user32.lib -stack:0x100000,0x100000 /entry:WeDontNeedMain /OUT:slim64.exe
-slim64.exe ../hello.slm
-popd
+cd build
+cl -Zi -GS- -Gs999999 -nologo ..\src\entry.c -link -nodefaultlib -subsystem:console kernel32.lib user32.lib -stack:0x1000000,0x1000000 /entry:WeDontNeedMain /OUT:slim64.exe
+slim64.exe m hello.slm
+cd ..
 
 :End
