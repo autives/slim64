@@ -9,7 +9,7 @@ int mine(int argc, char **argv) {
     Arena a;
     InitTempArena(&a, MegaBytes(1));
 
-    // FileSystem fs = SLM_CreateNewFileSystem("hello.slm", KiloBytes(10));
+    // FileSystem fs = SLM_CreateNewFileSystem("hello.slm", MegaBytes(10));
     // SLM_File root = SLM_ReadFileMetaData(&fs, fs.header.root);
 
     // block_index dir = SLM_InsertNewDirectory(&fs, "dir", root.self);

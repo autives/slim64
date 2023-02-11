@@ -133,6 +133,23 @@ static void ExplorerRun(Arena *arena, int argc, char **argv) {
                 }
             } break;
 
+            case c_make_directory:
+            {
+                MakeDirectoryArgs *arg = input.arg;
+                if(!arg)
+                    break;
+
+                for(int i = 0; i < arg->names.count; ++i ){
+                    char **name = VectorGet(&arg->names, i);
+                    SLM_InsertNewDirectory(&Explorer.fs, *name, Explorer.current_working_directory->base_block);
+                }
+            } break;
+
+            case c_clear:
+            {
+                print("\e[1;1H\e[2J");
+            } break;
+
             default:
             {
 

@@ -100,6 +100,13 @@ void VectorFree(Vector *vec) {
     vec->count = 0;
 }
 
+static void* VectorGet(Vector *vec, int index) {
+    if(index > vec->count) 
+        return 0;
+
+    return ((char*)vec->mem) + vec->unit_size * index;
+}
+
 
 #define M_ALLOC
 #endif

@@ -8,6 +8,7 @@
 /*
     Block Structure:
     u32 in_use
+    u32 used_before
     u32 prev_block
     u32 next_block
     data [block_size - 8]
@@ -17,20 +18,25 @@
 */
 
 #define BLOCK_SIZE (512)
-#define BLOCK_METADATA (3*sizeof(u32))
+#define BLOCK_METADATA (4*sizeof(u32))
 #define USABLE_BLOCK_SIZE ((BLOCK_SIZE) - (BLOCK_METADATA))
 
 
 #define IN_USE(block) GlobalFileOffset(block, 0) - BLOCK_METADATA
 #define BLOCK_BEGIN(block) IN_USE(block)
-#define PREV(block) GlobalFileOffset(block, sizeof(u32)) - BLOCK_METADATA
-#define NEXT(block) GlobalFileOffset(block, sizeof(u32) * 2) - BLOCK_METADATA
+#define USED_BEFORE(block) GlobalFileOffset(block, sizeof(u32)) - BLOCK_METADATA
+#define PREV(block) GlobalFileOffset(block, sizeof(u32) * 2) - BLOCK_METADATA
+#define NEXT(block) GlobalFileOffset(block, sizeof(u32) * 3) - BLOCK_METADATA
 #define CONTENT(block) GlobalFileOffset(block, 0)
 
 #define INIT_USED_SIZE sizeof(SLM_File)
 
 static inline file_offset GlobalFileOffset(block_index block, file_offset off) {
     return block * BLOCK_SIZE + off + sizeof(SLM_Header) + BLOCK_METADATA;
+}
+
+static inline void SLM_UpdateHeader(FileSystem *fs) {
+    WriteToFileAtOffset(&fs->file, &fs->header, sizeof(fs->header), 0);
 }
 
 block_index SLM_ReserveBlocks(FileSystem *fs, u32 count) {
@@ -45,39 +51,44 @@ block_index SLM_ReserveBlocks(FileSystem *fs, u32 count) {
         WriteToFileAtOffset(&fs->file, &in_use, sizeof(in_use), IN_USE(next_block));
         if(i == 0)
             WriteToFileAtOffset(&fs->file, &zero, sizeof(block_index), PREV(next_block));
+
+        u32 used_before = 0;
+        ReadFromFileAtOffset(&fs->file, &used_before, sizeof(used_before), USED_BEFORE(next_block));
+        if(used_before)
+            ReadFromFileAtOffset(&fs->file, &fs->header.next_free_block, sizeof(block_index), NEXT(fs->header.next_free_block));
+        else
+            fs->header.next_free_block++;
         
-        ReadFromFileAtOffset(&fs->file, &fs->header.next_free_block, sizeof(block_index), NEXT(fs->header.next_free_block));
+        used_before = 1;
+        WriteToFileAtOffset(&fs->file, &used_before, sizeof(used_before), USED_BEFORE(next_block));
+
         if(i == count - 1)
             WriteToFileAtOffset(&fs->file, &zero, sizeof(block_index), NEXT(next_block));
     }
 
     fs->header.used_size += count * fs->header.block_size;
     fs->header.nfree_blocks -= count;
+    SLM_UpdateHeader(fs);
     return res;
 }
 
 static void SLM_InitBlocks(FileSystem *fs) {
     WriteToFile(&fs->file, &fs->header, sizeof(fs->header));
 
-    char dummy_buf[BLOCK_SIZE] = { 0 };
-    for(int i = 0; i < fs->header.total_blocks; ++i) {
-        WriteToFile(&fs->file, dummy_buf, BLOCK_SIZE);
-    }
-
     fs->header.used_size += sizeof(fs->header);
-    MoveFilePointer(&fs->file, sizeof(fs->header), FOFFSET_BEGIN, FPOINTER_WRITE);
-    block_index i = 0;
-    for(; i < fs->header.total_blocks - 1; ++i) {
-        block_index next = i+1;
-        block_index prev = i-1;
-        WriteToFileAtOffset(&fs->file, &prev, sizeof(block_index), PREV(i));
-        WriteToFileAtOffset(&fs->file, &next, sizeof(block_index), NEXT(i));
-    }
+    // MoveFilePointer(&fs->file, sizeof(fs->header), FOFFSET_BEGIN, FPOINTER_WRITE);
+    // block_index i = 0;
+    // for(; i < fs->header.total_blocks - 1; ++i) {
+    //     block_index next = i+1;
+    //     block_index prev = i-1;
+    //     WriteToFileAtOffset(&fs->file, &prev, sizeof(block_index), PREV(i));
+    //     WriteToFileAtOffset(&fs->file, &next, sizeof(block_index), NEXT(i));
+    // }
 }
 
 static FileSystem SLM_CreateNewFileSystem(char *name, size_t total_size) {
     FileSystem result = { 0 };
-    result.file = CreateNewFile(name);
+    result.file = CreateLargeFile(name, total_size);
 
     // rounding up to nearest multiple of BLOCK_SIZE = 512
     total_size >>= 9;
@@ -124,6 +135,7 @@ static inline void SLM_GetBlock(FileSystem *fs, block_index block, char buf[BLOC
 
 typedef struct Block {
     u32 in_use;
+    u32 used_before;
     u32 prev;
     u32 next;
     char *content;
@@ -132,9 +144,11 @@ typedef struct Block {
 static inline Block ParseBlock(char buf[BLOCK_SIZE]) {
     Block result = { 0 };
 
-    result.in_use = *(u32*)buf++;
-    result.prev = *(u32*)buf++;
-    result.next = *(u32*)buf++;
+    u32 *_buf = (u32*)buf;
+    result.in_use = *_buf++;
+    result.used_before = *_buf++;
+    result.prev = *_buf++;
+    result.next = *_buf++;
     result.content = buf;
 
     return result;
@@ -238,7 +252,7 @@ static inline file_offset SLM_GetFileOffset(FileSystem *fs, block_index file) {
 
     block_index next_block = file;
     while(used_size >= BLOCK_SIZE) {
-        next_block = SLM_ReadNextBlockIndex(fs, file);
+        next_block = SLM_ReadNextBlockIndex(fs, next_block);
         used_size -= BLOCK_SIZE;
     }
 

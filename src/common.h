@@ -26,6 +26,6 @@ typedef u32 block_index;
 #define MIN(a, b) ((a) < (b)) ? (a) : (b)
 #define MAX(a, b) ((a) > (b)) ? (a) : (b)
 
-#define KiloBytes(n) ((n) * 1024L)
-#define MegaBytes(n) (KiloBytes(n) * 1024L)
-#define GigaBytes(n) (MegaBytes(n) * 1024L)
+#define KiloBytes(n) ((n) * 1024LL)
+#define MegaBytes(n) (KiloBytes(n) * 1024LL)
+#define GigaBytes(n) (MegaBytes(n) * 1024LL)

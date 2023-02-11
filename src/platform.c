@@ -248,6 +248,24 @@ active_file CreateNewFile(const char *file_name) {
     return result;
 }
 
+active_file CreateLargeFile(const char *file_name, size_t size) {
+    active_file result = CreateNewFile(file_name);
+
+#if defined(_WIN32)
+    SetFilePointer(result.handle, size, 0, FOFFSET_BEGIN);
+    SetEndOfFile(result.handle);
+    SetFilePointer(result.handle, 0, 0, FOFFSET_BEGIN);
+#elif defined(__linux__)
+    _lseek(result.handle, size, SEEK_SET);
+    u32 dummy = 0;
+    _write(result.handle, (char *)&dummy, sizeof(dummy));
+    _lseek(result.handle, 0, SEEK_SET);
+#endif
+    result.end = size;
+    
+    return result;
+}
+
 active_file OpenExistingFile(const char *file_name) {
     active_file result = { 0 };
 
@@ -279,7 +297,7 @@ int WriteToFile(active_file *file, void *buf, size_t size) {
     if(!(file->permissions & (FILE_READWRITE | FILE_WRITEONLY)))
         return 0;
 
-    Assert(size > 0);
+    Assert(size >= 0);
     
     DWORD bytes_written = 0;
 #if defined(_WIN32)
