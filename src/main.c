@@ -7,7 +7,7 @@
 
 int mine(int argc, char **argv) {
     Arena a;
-    InitTempArena(&a, MegaBytes(1));
+    InitTempArena(&a, MegaBytes(100));
 
     // FileSystem fs = SLM_CreateNewFileSystem("hello.slm", MegaBytes(10));
     // SLM_File root = SLM_ReadFileMetaData(&fs, fs.header.root);

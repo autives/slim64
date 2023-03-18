@@ -21,6 +21,7 @@ typedef enum Commands {
     c_copy,
     c_move,
     c_import,
+    c_open,
     c_search,
     c_find,
     c_delete,
@@ -51,9 +52,9 @@ typedef struct ImportArgs {
     char *dst;
 } ImportArgs;
 
-typedef struct SearchArgs {
+typedef struct {
     char *name;
-} SearchArgs;
+} SearchArgs, OpenArgs;
 
 // #define MAX_FIND_FILES 16
 typedef struct FindArgs {
@@ -75,6 +76,7 @@ static char *Command_Strings[c_total] =
         "copy",
         "move",
         "import",
+        "open",
         "search",
         "find",
         "del"

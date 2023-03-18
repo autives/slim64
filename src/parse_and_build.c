@@ -69,7 +69,7 @@ static int ExtractInteger(char **src, int *res) {
     char *src_str = *src;
     int count = 0;
     int value = 0;
-    int isNegative;
+    int isNegative = 0;
 
     if(src_str[count] == '-'){
         isNegative = 1;

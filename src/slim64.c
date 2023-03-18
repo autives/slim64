@@ -64,12 +64,35 @@ block_index SLM_ReserveBlocks(FileSystem *fs, u32 count) {
 
         if(i == count - 1)
             WriteToFileAtOffset(&fs->file, &zero, sizeof(block_index), NEXT(next_block));
+        else
+            WriteToFileAtOffset(&fs->file, &fs->header.next_free_block, sizeof(block_index), NEXT(next_block));
     }
 
     fs->header.used_size += count * fs->header.block_size;
     fs->header.nfree_blocks -= count;
     SLM_UpdateHeader(fs);
     return res;
+}
+
+void SLM_FreeBlocks(FileSystem *fs, block_index first) {
+    block_index next_block = first;
+
+    do {
+        u32 in_use;
+        ReadFromFileAtOffset(&fs->file, &in_use, sizeof(in_use), IN_USE(next_block));
+        Assert(in_use);
+
+        in_use = 0;
+        WriteToFileAtOffset(&fs->file, &in_use, sizeof(in_use), IN_USE(next_block));
+
+        block_index tmp;
+        ReadFromFileAtOffset(&fs->file, &tmp, sizeof(tmp), NEXT(next_block));
+
+        WriteToFileAtOffset(&fs->file, &fs->header.next_free_block, sizeof(block_index), NEXT(next_block));
+        fs->header.next_free_block = next_block;
+
+        next_block = tmp;
+    } while(next_block);
 }
 
 static void SLM_InitBlocks(FileSystem *fs) {
@@ -220,6 +243,19 @@ static inline block_index SLM_ReadParent(FileSystem *fs, block_index file) {
     block_index res;
     ReadFromFileAtOffset(&fs->file, &res, sizeof(res), GlobalFileOffset(file, OffsetOf(SLM_File, parent)));
     return res;
+}
+
+static inline void SLM_WriteParent(FileSystem *fs, block_index file, block_index parent) {
+    WriteToFileAtOffset(&fs->file, &parent, sizeof(parent), GlobalFileOffset(file, OffsetOf(SLM_File, parent)));
+}
+
+static inline void SLM_WriteSelf(FileSystem *fs, block_index file) {
+    WriteToFileAtOffset(&fs->file, &file, sizeof(file), GlobalFileOffset(file, OffsetOf(SLM_File, self)));
+}
+
+static inline void SLM_WriteContentOffset(FileSystem *fs, block_index file) {
+    file_offset off = GlobalFileOffset(file, INIT_USED_SIZE);
+    WriteToFileAtOffset(&fs->file, &off, sizeof(off), GlobalFileOffset(file, OffsetOf(SLM_File, content)));
 }
 
 static inline size_t SLM_GetAvailableSize(SLM_File file) {
@@ -382,6 +418,26 @@ static inline void SLM_WriteNEntries(FileSystem *fs, block_index directory, u32 
     WriteToFileAtOffset(&fs->file, &nentries, sizeof(nentries), GlobalFileOffset(directory, INIT_USED_SIZE));
 }
 
+static inline void SLM_WriteFileName(FileSystem *fs, block_index file, char *name) {
+    WriteToFileAtOffset(&fs->file, name, 128, GlobalFileOffset(file, OffsetOf(SLM_File, name)));
+}
+
+static inline SLM_DirectoryEntry SLM_ReadEntry(FileSystem *fs, block_index directory, u32 index) {
+    SLM_DirectoryEntry entry;
+    SLM_ReadFromFileAtOffset(fs, directory, (void*)&entry, sizeof(entry), index * sizeof(SLM_DirectoryEntry) + sizeof(u32));
+    return entry;
+}
+
+static block_index SLM_GetChild(FileSystem *fs, block_index directory, char *child_name) {
+    u32 nentries = SLM_ReadNEntries(fs, directory);
+    for(u32 i = 0; i < nentries; ++i) {
+        SLM_DirectoryEntry entry = SLM_ReadEntry(fs, directory, i);
+        if(_strcmp(entry.name, child_name))
+            return entry.base_block;
+    }
+    return 0;
+}
+
 static void SLM_DirectoryAddEntry(FileSystem *fs, block_index directory, SLM_DirectoryEntry *entry) {
     SLM_File directory_metadata = SLM_ReadFileMetaData(fs, directory);
     Assert(directory_metadata.is_directory);
@@ -394,6 +450,43 @@ static void SLM_DirectoryAddEntry(FileSystem *fs, block_index directory, SLM_Dir
     SLM_WriteToFile(fs, directory, (void*)entry, sizeof(*entry));
     SLM_WriteNEntries(fs, directory, ++nentries);
 }
+
+static inline void SLM_ReplaceEntry(FileSystem *fs, block_index directory, u32 index, SLM_DirectoryEntry *entry) {
+    SLM_WriteToFileAtOffset(fs, directory, (char*)entry, sizeof(*entry), index * sizeof(SLM_DirectoryEntry) + sizeof(u32));
+}
+
+static void SLM_DirectoryRemoveEntry(FileSystem *fs, block_index directory, block_index base_block) {
+    u32 is_directory = SLM_ReadIsDirectory(fs, directory);
+    Assert(is_directory);
+
+    int i;
+    u32 nentries = SLM_ReadNEntries(fs, directory);
+    for(i = 0; i < nentries; ++i) {
+        SLM_DirectoryEntry entry = SLM_ReadEntry(fs, directory, i);
+        if(entry.base_block == base_block)
+            break;
+    }
+
+    for(; i < nentries - 1; ++i) {
+        SLM_DirectoryEntry next_entry = SLM_ReadEntry(fs, directory, i + 1);
+        SLM_ReplaceEntry(fs, directory, i, &next_entry);
+    }
+    
+    if(nentries) {
+        nentries--;
+        SLM_WriteNEntries(fs, directory, nentries);
+    }
+}
+
+static u32 SLM_EntryExists(FileSystem *fs, block_index directory, char *name) {
+    u32 nentries = SLM_ReadNEntries(fs, directory);
+    for(int i = 0; i < nentries; ++i) {
+        SLM_DirectoryEntry entry = SLM_ReadEntry(fs, directory, i);
+        if(_strcmp(name, entry.name))
+            return 1;
+    }
+    return 0;
+ }
 
 static inline SLM_File SLM_CreateEmptyDirectory(FileSystem *fs, char *name) {
     SLM_File result = { 0 };
@@ -471,21 +564,6 @@ static block_index SLM_InsertNewFile(FileSystem *fs, char *name, block_index par
     return file.self;
 }
 
-static inline SLM_DirectoryEntry SLM_ReadEntry(FileSystem *fs, block_index directory, u32 index) {
-    SLM_DirectoryEntry entry;
-    SLM_ReadFromFileAtOffset(fs, directory, (void*)&entry, sizeof(entry), index * sizeof(SLM_DirectoryEntry) + sizeof(u32));
-    return entry;
-}
-
-static block_index SLM_GetChild(FileSystem *fs, block_index directory, char *child_name) {
-    u32 nentries = SLM_ReadNEntries(fs, directory);
-    for(u32 i = 0; i < nentries; ++i) {
-        SLM_DirectoryEntry entry = SLM_ReadEntry(fs, directory, i);
-        if(_strcmp(entry.name, child_name))
-            return entry.base_block;
-    }
-    return 0;
-}
 
 static int SLM_BuildPath(FileSystem *fs, block_index file, char *res, size_t size) {
     char names[16][128] = { 0 };
@@ -506,6 +584,123 @@ static int SLM_BuildPath(FileSystem *fs, block_index file, char *res, size_t siz
     }
 
     return bytes_written - 1;
+}
+
+static void SLM_RenameEntry(FileSystem *fs, block_index parent, char *old_name, char *new_name) {
+    u32 is_directory = SLM_ReadIsDirectory(fs, parent);
+    if(!is_directory)
+        return;
+
+    u32 n_entries = SLM_ReadNEntries(fs, parent);
+    for(int i = 0; i < n_entries; ++i) {
+        SLM_DirectoryEntry entry = SLM_ReadEntry(fs, parent, i);
+        if(_strcmp(entry.name, old_name)) {
+            u32 char_copied = _strcpy(new_name, entry.name, 127);
+            entry.name[char_copied] = '\0';
+            
+            SLM_WriteToFileAtOffset(fs, parent, (char*)&entry, sizeof(entry), i * sizeof(entry) + sizeof(u32));
+            SLM_WriteFileName(fs, entry.base_block, entry.name);
+            
+            break;
+        }
+    }
+}
+
+static inline void SLM_ReadBlock(FileSystem *fs, block_index block, char buf[USABLE_BLOCK_SIZE]) {
+    ReadFromFileAtOffset(&fs->file, buf, USABLE_BLOCK_SIZE, GlobalFileOffset(block, 0));
+}
+
+static inline void SLM_WriteBlock(FileSystem *fs, block_index block, char buf[USABLE_BLOCK_SIZE]) {
+    WriteToFileAtOffset(&fs->file, buf, USABLE_BLOCK_SIZE, GlobalFileOffset(block, 0));
+}
+
+
+static void SLM_Copy(FileSystem *fs, block_index src, block_index dst) {
+    u32 is_directory = SLM_ReadIsDirectory(fs, dst);
+    Assert(is_directory);
+
+    block_index parent = SLM_ReadParent(fs, src);
+    u32 n_children = SLM_ReadNEntries(fs, parent);
+
+    SLM_DirectoryEntry entry = { 0 };
+    for(int i = 0; i < n_children; ++i) {
+        entry = SLM_ReadEntry(fs, parent, i);
+        if(entry.base_block == src)
+            break;
+    }
+
+    if(SLM_EntryExists(fs, dst, entry.name)) {
+        _strcpy("-copy", entry.name + _strlen(entry.name), 128);
+    }
+
+    is_directory = SLM_ReadIsDirectory(fs, src);
+    if(is_directory){
+        block_index src_copy = SLM_InsertNewDirectory(fs, entry.name, dst);
+        u32 n_children = SLM_ReadNEntries(fs, src);
+
+        for(int i = 0; i < n_children; ++i) {
+            SLM_DirectoryEntry entry = SLM_ReadEntry(fs, src, i);
+            SLM_Copy(fs, entry.base_block, src_copy);
+        }
+    }
+
+    else {
+        u32 n_blocks = SLM_ReadNBlocks(fs, src);
+        block_index src_copy = SLM_ReserveBlocks(fs, n_blocks);
+        entry.base_block = src_copy;
+        SLM_DirectoryAddEntry(fs, dst, &entry);
+
+        char buf[USABLE_BLOCK_SIZE];
+        for(int i = 0; i < n_blocks; ++i) {
+            SLM_ReadBlock(fs, src, buf);
+            SLM_WriteBlock(fs, src_copy, buf);
+            src = SLM_ReadNextBlockIndex(fs, src);
+            src_copy = SLM_ReadNextBlockIndex(fs, src_copy);
+        }
+
+        SLM_WriteParent(fs, entry.base_block, dst);
+        SLM_WriteSelf(fs, entry.base_block);
+        SLM_WriteContentOffset(fs, entry.base_block);            
+    }
+
+}
+
+static void SLM_Move(FileSystem *fs, block_index src, block_index dst) {
+    u32 is_directory = SLM_ReadIsDirectory(fs, dst);
+    Assert(is_directory);
+
+    block_index parent = SLM_ReadParent(fs, src);
+    u32 n_children = SLM_ReadNEntries(fs, parent);
+
+    SLM_DirectoryEntry entry = { 0 };
+    for(int i = 0; i < n_children; ++i) {
+        entry = SLM_ReadEntry(fs, parent, i);
+        if(entry.base_block == src)
+            break;
+    }
+
+    if(SLM_EntryExists(fs, dst, entry.name)) {
+        _strcpy("-copy", entry.name + _strlen(entry.name), 128);
+    }
+
+    SLM_DirectoryRemoveEntry(fs, parent, src);
+    SLM_DirectoryAddEntry(fs, dst, &entry);
+    SLM_WriteParent(fs, src, dst);
+}
+
+static void SLM_DeleteFile(FileSystem *fs, block_index file) {
+    block_index parent = SLM_ReadParent(fs, file);
+    SLM_DirectoryRemoveEntry(fs, parent, file);
+
+    u32 is_directory = SLM_ReadIsDirectory(fs, file);
+    if(is_directory) {
+        u32 nentries = SLM_ReadNEntries(fs, file);
+        for(u32 i = 0; i < nentries; ++i) {
+            SLM_DirectoryEntry entry = SLM_ReadEntry(fs, file, i);
+            SLM_DeleteFile(fs, entry.base_block);
+        }
+    }
+    SLM_FreeBlocks(fs, file);
 }
 
 #define SLIM64_C

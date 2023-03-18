@@ -149,6 +149,15 @@ void* ExtractImportArgs(Arena *arena, char **str) {
     return args;
 }
 
+void* ExtractOpenArgs(Arena *arena, char **str) {
+    OpenArgs *args = PushStruct(arena, OpenArgs);
+
+    args->name = GetString(str);
+    if(**str != 0)
+        return 0;
+    return args;
+}
+
 void* ExtractSearchArgs(Arena *arena, char **str) {
     SearchArgs *args = PushStruct(arena, SearchArgs);
     args->name = GetString(str);
@@ -203,6 +212,7 @@ void* (*argument_extractor[c_total]) (Arena *arena, char **str) =
     ExtractCopyArgs,
     ExtractMoveArgs,
     ExtractImportArgs,
+    ExtractOpenArgs,
     ExtractSearchArgs,
     ExtractFindArgs,
     ExtractDeleteArgs,

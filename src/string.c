@@ -19,19 +19,6 @@ int _strcmp(const char *str1, const char *str2) {
     return 1;
 }
 
-int _strcpy(const char *src, char *dst, size_t size) {
-    if(!src || !dst)
-        return 0;
-
-    int count = 0;
-    for(; count < size; ++count) {
-        if(src[count] == '\0') 
-            break;
-        dst[count] = src[count];
-    }
-    return count;
-}
-
 int _strlen(const char *src) {
     if(!src)
         return -1;
@@ -44,6 +31,18 @@ int _strlen(const char *src) {
     return count;
 }
 
+int _strcpy(const char *src, char *dst, size_t size) {
+    if(!src || !dst)
+        return 0;
+
+    int len = _strlen(dst) + 1, count = 0;
+    for(; count < size + len; ++count) {
+        if(src[count] == '\0') 
+            break;
+        dst[count] = src[count];
+    }
+    return count;
+}
 
 int contains(const char *str, const char *token) {
     int index = 0;

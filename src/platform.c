@@ -191,6 +191,7 @@ static int WriteEntireFile(loaded_file file, const char *file_name) {
         bytes_written += res;        
     }
 
+    CloseHandle(FileHandle);
     return 1;
 }
 
@@ -404,6 +405,34 @@ void *MemAlloc(size_t size) {
     return VirtualAlloc(0, size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
 #elif defined(__linux__)
     return _mmap(0, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
+#endif
+}
+
+static void ClearConsole() {
+#if defined(_WIN32)
+    HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    CONSOLE_SCREEN_BUFFER_INFO info;
+    GetConsoleScreenBufferInfo(console, &info);
+
+    DWORD written;
+    FillConsoleOutputCharacter(console, ' ', info.dwSize.X * info.dwSize.Y, (COORD){0, 0}, &written);
+    SetConsoleCursorPosition(console, (COORD){0, 0});
+#elif defined(__linux__)
+    _write(1, "\e[1;1H\e[2J", 10);
+#endif
+}
+
+static void RunFile(char *file_name) {
+#if defined (_WIN32)
+    SHELLEXECUTEINFOA info = { 0 };
+    info.cbSize = sizeof(info);
+    info.fMask = SEE_MASK_DEFAULT;
+    info.lpVerb = "open";
+    info.lpFile = file_name;
+    ShellExecuteExA(&info);
+#elif defined(__linux__)
+    // ??
 #endif
 }
 
