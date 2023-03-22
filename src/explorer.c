@@ -2,13 +2,43 @@
 #include "console_io.c"
 #include "slim64.c" 
 #include "parser.c"
-#include <fileapi.h>
 
 #define PATH   "\x1B[38;5;190m"
 #define RESET "\x1B[0m"
 
 static const char *usage_msg = "Usage: slim64 <mode> <file name>\n";
 static const char *modes_msg = "mode:\n  m[ount] = mount existing instance of the file system\n  n[ew]   = create new instance of the file system\n";
+static const char *help_msg = \
+"\
+    This is a command line based explorer for Slim64 File System\n\n\
+    Supported Commands:\n\
+    help:\n\
+    \tDisplays this message\n\
+    pwd:\n\
+    \tDisplays the current working directory\n\
+    cd <target>:\n\
+    \tChange the current working directory to <target>\n\
+    mkdir <path>:\n\
+    \tCreates a directory at path. Also creates intermediate directories if necessary\n\
+    quit:\n\
+    \tTerminates the program\n\
+    clear:\n\
+    \tClear the console\n\
+    list:\n\
+    \tLists the list of files and diectory in the current working directory\n\
+    ren <old> <new>:\n\
+    \tChanges the name of <old> to <new>\n\
+    copy <files> <dst>:\n\
+    \tCopies the items in <files> to <dst>\n\
+    move <files> <dst>:\n\
+    \tMoves the items in <files> to <dst>\n\
+    import <src> <dst>\n\
+    \tImports <src> from OS filesystem to <dst> in the Slim64 filesystem\n\
+    open <file>\n\
+    \tOpens the <file>\n\
+    del <files>\n\
+    \tDeletes the items listed in <files>\n\
+";
 
 static explorer_state ExplorerBegin(Arena *arena, char *name, int create_new) {
     explorer_state Explorer = { 0 };
@@ -28,6 +58,55 @@ static explorer_state ExplorerBegin(Arena *arena, char *name, int create_new) {
     Explorer.path[char_copied] = '>';
     Explorer.path[char_copied + 1] = '\0';
     return Explorer;
+}
+
+typedef int (*comparator) (const void*, const void*);
+
+typedef struct List {
+    size_t size;
+    u32 is_directory;
+    char name[128];
+} ListItem;
+
+inline int list_item_comp(const void *_a, const void *_b){
+    return compare_str(((ListItem*)_a)->name, ((ListItem*)_b)->name);
+} 
+
+void swap(Arena *arena, void* a, void* b, size_t size) {
+    void *buf = PushSize(arena, size);
+    m_copy(a, buf, size);
+    m_copy(b, a, size);
+    m_copy(buf, b, size);
+}
+
+int partition(Arena *arena, void *arr, int low, int high, size_t size,
+              int (*cmp)(const void *, const void *)) {
+    void *pivot = (char*)arr + high * size;
+    int i = low - 1;
+
+    for (int j = low; j <= high - 1; j++) {
+        if (cmp((char*)arr + j * size, pivot) < 0) {
+            i++;
+            swap(arena, (char*)arr + i * size, (char*)arr + j * size, size);
+        }
+    }
+
+    swap(arena, (char*)arr + (i+1) * size, (char*)arr + high * size, size);
+    return (i + 1);
+}
+
+void q_sort(Arena *arena, void *arr, int low, int high, size_t size,
+               int (*cmp)(const void *, const void *)) {
+    if (low < high) {
+        int pi = partition(arena, arr, low, high, size, cmp);
+
+        q_sort(arena, arr, low, pi - 1, size, cmp);
+        q_sort(arena, arr, pi + 1, high, size, cmp);
+    }
+}
+
+void sort(Vector *v, comparator comp) {
+    q_sort(v->arena, v->mem, 0, v->count - 1, v->unit_size, comp);
 }
 
 static void ChangeWorkingDirectory(explorer_state *Explorer, block_index cwd_new) {
@@ -156,27 +235,6 @@ static char* ExtractFileNameFromPath(char *path) {
 }
 
 static void ExportTmpFile(explorer_state *Explorer, char *file_name, loaded_file file) {
-    // Vector file_path = ParsePath(Explorer->arena, path);
-    // traverse_result res = TraversePath(&file_path, &Explorer->fs, Explorer->current_working_directory);
-
-    // // if(res.err) {
-    // //     print("Invalid arguments provided\n");
-    // //     return;
-    // // }
-
-    // size_t file_size = SLM_ReadUsedSize(&Explorer->fs, res.terminating) - INIT_USED_SIZE;
-    // char *buf = PushString(Explorer->arena, file_size);
-    // SLM_ReadFromFileAtOffset(&Explorer->fs, res.terminating, buf, file_size, 0);
-
-    // loaded_file file = { 0 };
-    // file.content = buf;
-    // file.size = file_size;
-
-    // char *file_name = ExtractFileNameFromPath(path);
-    // char tmp_file_path[256] = { 0 };
-    // _strcpy(".\\tmp\\", tmp_file_path, 6);
-    // _strcpy(file_name, tmp_file_path + 6, 256 - 6);
-
     CreateDirectoryA("tmp", 0);
     WriteEntireFile(file, file_name);
 }
@@ -250,6 +308,7 @@ static void ExplorerRun(Arena *arena, int argc, char **argv) {
     else {
         print("Invalid mode \"%s\"\n", argv[1]);
         print("%s", modes_msg);
+        return;
     }
 
     delete_folder("tmp");
@@ -294,13 +353,25 @@ static void ExplorerRun(Arena *arena, int argc, char **argv) {
                 DisplayChild("..", 1, 0);
 
                 u32 n_children = SLM_ReadNEntries(&Explorer.fs, Explorer.current_working_directory->base_block);
+                Vector list = VectorBegin(arena, n_children, sizeof(ListItem));
+                
                 for(int i = 0; i < n_children; ++i) {
                     SLM_DirectoryEntry entry = SLM_ReadEntry(&Explorer.fs, Explorer.current_working_directory->base_block, i);
 
                     u32 is_directory = SLM_ReadIsDirectory(&Explorer.fs, entry.base_block);
                     size_t total_size = SLM_ReadUsedSize(&Explorer.fs, entry.base_block);
                     size_t effective_size = total_size - INIT_USED_SIZE;
-                    DisplayChild(entry.name, is_directory, effective_size);
+
+                    ListItem item = {effective_size, is_directory};
+                    _strcpy(entry.name, item.name, 128);
+                    VectorPush(&list, &item);
+
+                }
+                sort(&list, list_item_comp);
+
+                for(int i = 0; i < n_children; ++i) {
+                    ListItem *item = VectorGet(&list, i);
+                    DisplayChild(item->name, item->is_directory, item->size);
                 }
             } break;
 
@@ -495,7 +566,7 @@ static void ExplorerRun(Arena *arena, int argc, char **argv) {
 
                 Vector dst_path = ParsePath(arena, args->dst);
                 traverse_result res = TraversePath(&dst_path, &Explorer.fs, Explorer.current_working_directory);
-                if(res.err) {
+                if(res.err && res.err != ends_with_pnemonic) {
                     print("Invalid destination\n");
                     break;
                 }
@@ -537,6 +608,10 @@ static void ExplorerRun(Arena *arena, int argc, char **argv) {
                 RunFile(tmp_file_path);
             } break;
 
+            case c_help:
+            {
+                print("%s\n", help_msg);
+            }
             default:
             {
 

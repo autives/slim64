@@ -1,6 +1,4 @@
 #include "main.c"
-#include <processthreadsapi.h>
-#include <winnt.h>
 
 #if defined(_WIN32)
 #include <Windows.h>

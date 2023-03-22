@@ -44,6 +44,26 @@ int _strcpy(const char *src, char *dst, size_t size) {
     return count;
 }
 
+int compare_str(const void *_str1, const void *_str2) {
+    const char *str1 = _str1, *str2 = _str2;
+    if(!str1 || !str2)
+        return 0;
+    
+    while(*str1 && *str2) {
+        if(*str1 < *str2)
+            return -1;
+        else if(*str1 > *str2)
+            return 1;
+        str1++;
+        str2++;
+    }
+    if(!*str1 && *str2)
+        return -1;
+    else if(*str1 && !*str2)
+        return 1;
+    return 0;
+}
+
 int contains(const char *str, const char *token) {
     int index = 0;
     while(str[index]) {

@@ -15,6 +15,11 @@
 
     prev_block is 0 for the first block of a file
     if not in_use (free block) next_block gives the index of the next free block
+
+    Directory Structure:
+    u32 n_entries
+    char entry_name[]
+    block_index first_block_of_the_entry
 */
 
 #define BLOCK_SIZE (512)

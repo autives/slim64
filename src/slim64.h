@@ -35,9 +35,6 @@ typedef struct {
 
     block_index next_free_block;
 
-    // size_t nfiles;
-    // size_t ndirectories; 
-
     block_index root;
 } SLM_Header;
 #pragma pack(pop)
