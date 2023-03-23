@@ -107,10 +107,6 @@ void* ExtractMakeDirectoryArgs(Arena *arena, char **str) {
     return args;
 }
 
-void* ExtractMakeFileArgs(Arena *arena, char **str) {
-    return ExtractMakeDirectoryArgs(arena, str);
-}
-
 void* ExtractRenameArgs(Arena *arena, char **str) {
     ChangeName *args = PushStruct(arena, ChangeName);
 
@@ -158,29 +154,6 @@ void* ExtractOpenArgs(Arena *arena, char **str) {
     return args;
 }
 
-void* ExtractSearchArgs(Arena *arena, char **str) {
-    SearchArgs *args = PushStruct(arena, SearchArgs);
-    args->name = GetString(str);
-    return args;
-}
-
-void* ExtractFindArgs(Arena *arena, char **str) {
-    FindArgs *args = PushStruct(arena, FindArgs);
-    args->files = VectorBegin(arena, 2, sizeof(char*));
-
-    args->str_to_search = GetString(str);
-    while(**str != 0) {
-        char *name = GetString(str);
-        VectorPush(&args->files, name);
-    }
-    if(!args->files.count) {
-        VectorFree(&args->files);
-        args = 0;
-    }
-
-    return args;
-}
-
 void* ExtractDeleteArgs(Arena *arena, char **str) {
     DeleteArgs *args = PushStruct(arena, DeleteArgs);
     args->names = VectorBegin(arena, 2, sizeof(char*));
@@ -207,14 +180,11 @@ void* (*argument_extractor[c_total]) (Arena *arena, char **str) =
     ExtractChangeDirectoryArgs,
     DoNothing,
     ExtractMakeDirectoryArgs,
-    ExtractMakeFileArgs,
     ExtractRenameArgs,
     ExtractCopyArgs,
     ExtractMoveArgs,
     ExtractImportArgs,
     ExtractOpenArgs,
-    ExtractSearchArgs,
-    ExtractFindArgs,
     ExtractDeleteArgs,
 };
 

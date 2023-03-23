@@ -322,8 +322,7 @@ static void SLM_WriteToFile(FileSystem *fs, block_index base_block, char *data, 
     if(size_to_write < size) {
         while(written_size < size) {
             write_at = CONTENT(next_block);
-            size -= size_to_write;
-            size_to_write = MIN(size, USABLE_BLOCK_SIZE);
+            size_to_write = MIN(size - size_to_write, USABLE_BLOCK_SIZE);
             WriteToFileAtOffset(&fs->file, data + written_size, size_to_write, write_at);
             written_size += size_to_write;
             next_block = SLM_ReadNextBlockIndex(fs, next_block);
@@ -480,6 +479,17 @@ static void SLM_DirectoryRemoveEntry(FileSystem *fs, block_index directory, bloc
     if(nentries) {
         nentries--;
         SLM_WriteNEntries(fs, directory, nentries);
+    }
+
+    u32 n_block = SLM_ReadNBlocks(fs, directory);
+    if(INIT_USED_SIZE + nentries * sizeof(SLM_DirectoryEntry) + sizeof(u32) + USABLE_BLOCK_SIZE - 1 < n_block * USABLE_BLOCK_SIZE) {
+        block_index block_to_free = SLM_GetLastBlock(fs, directory);
+        block_index prev;
+        ReadFromFileAtOffset(&fs->file, &prev, sizeof(prev), PREV(block_to_free));
+        u32 zero = 0;
+        WriteToFileAtOffset(&fs->file, &zero , sizeof(u32), NEXT(prev));
+        SLM_FreeBlocks(fs, SLM_GetLastBlock(fs, directory));
+
     }
 }
 

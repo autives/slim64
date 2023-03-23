@@ -19,13 +19,13 @@ static const char *help_msg = \
     cd <target>:\n\
     \tChange the current working directory to <target>\n\
     mkdir <path>:\n\
-    \tCreates a directory at path. Also creates intermediate directories if necessary\n\
+    \tCreates a directory at <path>. Also creates intermediate directories if necessary\n\
     quit:\n\
     \tTerminates the program\n\
     clear:\n\
     \tClear the console\n\
     list:\n\
-    \tLists the list of files and diectory in the current working directory\n\
+    \tLists the list of files and diectories in the current working directory\n\
     ren <old> <new>:\n\
     \tChanges the name of <old> to <new>\n\
     copy <files> <dst>:\n\
@@ -321,7 +321,7 @@ static void ExplorerRun(Arena *arena, int argc, char **argv) {
         switch(input.command) {
             case c_invalid:
             {
-                print("Unknown command \"%s\"\n", input.arg);
+                print("Unknown command\n");
             } break;
 
             case c_quit:
@@ -452,7 +452,7 @@ static void ExplorerRun(Arena *arena, int argc, char **argv) {
             case c_rename:
             {
                 ChangeName *arg = input.arg;
-                if(!arg->old_name || arg->new_name) {
+                if(!arg->old_name || !arg->new_name) {
                     print("Insufficient arguments\n");
                 }
 

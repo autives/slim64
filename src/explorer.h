@@ -16,14 +16,11 @@ typedef enum Commands {
     c_change_directory,
     c_current_directory,
     c_make_directory,
-    c_make_file,
     c_rename,
     c_copy,
     c_move,
     c_import,
     c_open,
-    c_search,
-    c_find,
     c_delete,
     
     c_total
@@ -71,14 +68,11 @@ static char *Command_Strings[c_total] =
         "cd",
         "pwd",
         "mkdir",
-        "mkfile",
         "ren",
         "copy",
         "move",
         "import",
         "open",
-        "search",
-        "find",
         "del"
 };
 

@@ -5,7 +5,7 @@
 #include "explorer.c"
 
 
-int mine(int argc, char **argv) {
+int main(int argc, char **argv) {
     Arena a;
     InitTempArena(&a, MegaBytes(512));
     ExplorerRun(&a, argc, argv);
